@@ -2,6 +2,7 @@
   <dictionary name="wadek">
     <words>
       <w>jsonify</w>
+      <w>sqlalchemy</w>
     </words>
   </dictionary>
 </component>

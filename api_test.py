@@ -1,59 +1,70 @@
 from flask import Flask, request, jsonify
+from flask_marshmallow import Marshmallow
+from flask_sqlalchemy import SQLAlchemy
+import os
 
+# init app
 app = Flask(__name__)
+basedir = os.path.abspath(os.path.dirname(__file__))
 
-# Create some test data for our catalog in the form of a list of dictionaries.
-books = [
-    {'id': 0,
-     'title': 'A Fire Upon the Deep',
-     'author': 'Vernor Vinge',
-     'first_sentence': 'The coldsleep itself was dreamless.',
-     'year_published': '1992'},
-    {'id': 1,
-     'title': 'The Ones Who Walk Away From Omelas',
-     'author': 'Ursula K. Le Guin',
-     'first_sentence': 'With a clamor of bells that set the swallows soaring, the Festival',
-     'published': '1973'},
-    {'id': 2,
-     'title': 'Dhalgren',
-     'author': 'Samuel R. Delany',
-     'first_sentence': 'to wound the autumnal city.',
-     'published': '1975'}
-]
+# Database
+app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///' + os.path.join(basedir, 'db.sqlite')
+app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
+
+# init database
+db = SQLAlchemy(app)
+
+# init marshmallow
+marshmallow = Marshmallow(app)
 
 
-@app.route('/', methods=['GET'])
-def test_api():
-    return '''<h1>Distant Reading Archive</h1>
-<p>A prototype API for distant reading of science fiction novels.</p>'''
+# our class here
+class Product(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    name = db.Column(db.String(100), unique=True)
+    description = db.Column(db.String(300))
+    price = db.Column(db.Float)
+    quantity = db.Column(db.Integer)
+
+    def __init__(self, name, description, price, quantity):
+        self.name = name
+        self.description = description
+        self.price = price
+        self.quantity = quantity
 
 
-# A route to return all of the available entries in our catalog.
-@app.route('/api/v1/resources/books/all', methods=['GET'])
-def api_all():
-    return jsonify(books)
+class ProductSchema(marshmallow.Schema):
+    class Meta:
+        fields = ('id', 'name', 'description', 'price', 'quantity')
 
 
-@app.route('/api/v1/resources/books', methods=['GET'])
-def api_id():
-    # Check if an ID was provided as part of the URL.
-    # If ID is provided, assign it to a variable.
-    # If no ID is provided, display an error in the browser.
-    if 'id' in request.args:
-        id = int(request.args['id'])
-    else:
-        return "Error: No id field provided. Please specify an id."
-    # Create an empty list for our results
-    results = []
+product_schema = ProductSchema(strict=True)
+products_schema = ProductSchema(many=True, strict=True)
 
-    # Loop through the data and match results that fit the requested ID.
-    # IDs are unique, but other fields might return many results
-    for book in books:
-        if book['id'] == id:
-            results.append(book)
-    # Use the jsonify function from Flask to convert our list of
-    # Python dictionaries to the JSON format.
-    return jsonify(results)
+
+# create product
+@app.route('/product', methods=['POST'])
+def add_product():
+    name = request.json['name']
+    description = request.json['description']
+    price = request.json['price']
+    quantity = request.json['quantity']
+
+    new_product = Product(name, description, price, quantity)
+
+    # add product to db
+    db.session.add(new_product)
+    db.session.commit()
+
+    return product_schema.jsonify(new_product)
+
+
+# retrieve product
+@app.route('/product', methods=['GET'])
+def get_products():
+    all_products = Product.query.all()
+    result = product_schema.dump(all_products)
+    return jsonify(result.data)
 
 
 if __name__ == '__main__':
